@@ -2,7 +2,7 @@ require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
 
 describe "Rollout" do
   before do
-    @redis   = Redis.new
+    @redis   = MockRedis.new
     @rollout = Rollout.new(@redis)
   end
 
@@ -145,6 +145,10 @@ describe "Rollout" do
 
     it "becomes inactivate for all users" do
       @rollout.should_not be_active(:chat, stub(:id => 24))
+    end
+
+    it "becomes inactivate for a nil user (not logged in)" do
+      @rollout.should_not be_active(:chat, nil)
     end
   end
 end
