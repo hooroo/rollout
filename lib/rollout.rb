@@ -1,29 +1,30 @@
 class Rollout
-  def initialize(redis)
+  def initialize(redis, features=nil)
     @redis  = redis
+    @features = features
     @groups = {"all" => lambda { |user| true }}
   end
 
   def activate_group(feature, group)
-    @redis.sadd(group_key(feature), group)
+    activate(group_key(feature), group)
   end
 
   def deactivate_group(feature, group)
-    @redis.srem(group_key(feature), group)
+    deactivate(group_key(feature), group)
   end
 
   def deactivate_all(feature)
-    @redis.del(group_key(feature))
-    @redis.del(user_key(feature))
-    @redis.del(percentage_key(feature))
+    deactivate_feature(group_key(feature))
+    deactivate_feature(user_key(feature))
+    deactivate_feature(percentage_key(feature))
   end
 
   def activate_user(feature, user)
-    @redis.sadd(user_key(feature), user.id)
+    activate(user_key(feature), user.id)
   end
 
   def deactivate_user(feature, user)
-    @redis.srem(user_key(feature), user.id)
+    deactivate(user_key(feature), user.id)
   end
 
   def define_group(group, &block)
@@ -37,11 +38,22 @@ class Rollout
   end
 
   def activate_percentage(feature, percentage)
-    @redis.set(percentage_key(feature), percentage)
+    key = percentage_key(feature)
+    raise 'Invalid feature' unless valid_feature?(key)
+    @redis.set(key, percentage)
   end
 
   def deactivate_percentage(feature)
-    @redis.del(percentage_key(feature))
+    deactivate_feature(percentage_key(feature))
+  end
+
+  def registered_features
+    @features
+  end
+
+  def active_features
+    active_keys = @redis.keys('feature:*')
+    active_keys.collect { |key| feature_name(key) }.uniq
   end
 
   private
@@ -73,5 +85,28 @@ class Rollout
       percentage = @redis.get(percentage_key(feature))
       return false if percentage.nil?
       user.id % 100 < percentage.to_i
+    end
+
+    def activate(key, member)
+      raise 'Invalid feature' unless valid_feature?(key)
+      @redis.sadd(key, member)
+    end
+
+    def deactivate(key, member)
+      raise 'Invalid feature' unless valid_feature?(key)
+      @redis.srem(key, member)
+    end
+
+    def deactivate_feature(key)
+      raise 'Invalid feature' unless valid_feature?(key)
+      @redis.del(key)
+    end
+
+    def valid_feature?(key)
+      @features ? @features.include?(feature_name(key)) : true
+    end
+
+    def feature_name(key)
+      key.split(':')[1]
     end
 end
